@@ -1,23 +1,48 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime date import date
 import os
 
 st.set_page_config(page_title="Liseli Shop", page_icon="🛒")
 
+# --- PASSWORDS ---
+OWNER_PASSWORD = "liseli2016"
+SALES_PASSWORD = "sales123"  # Change this to what you want to give worker!
+
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+if "role" not in st.session_state:
+    st.session_state.role = ""
 
 if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align:center; color:#1E7A34;'>🛒 Liseli Shop</h1>", unsafe_allow_html=True)
+    st.write("Welcome! Please login:")
     pwd = st.text_input("Password", type="password")
     if st.button("Login", type="primary"):
-        if pwd == "liseli2016":
+        if pwd == OWNER_PASSWORD:
             st.session_state.logged_in = True
+            st.session_state.role = "owner"
+            st.rerun()
+        elif pwd == SALES_PASSWORD:
+            st.session_state.logged_in = True
+            st.session_state.role = "sales"
             st.rerun()
         else:
             st.error("Wrong password!")
     st.stop()
+
+# Logout button
+col_top1, col_top2 = st.columns([4, 1])
+with col_top1:
+    if st.session_state.role == "owner":
+        st.markdown("👑 **Logged in as: OWNER**")
+    else:
+        st.markdown("👩‍💼 **Logged in as: SALES PERSON**")
+with col_top2:
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.role = ""
+        st.rerun()
 
 st.markdown("""
 <style>
@@ -56,10 +81,7 @@ def load_stock():
     return {}
 def save_stock(stock_dict):
     pd.DataFrame([{"Product": k, "Qty": v} for k, v in stock_dict.items()]).to_csv(STOCK_FILE, index=False)
-
-# --- BARCODE MAP: Barcode -> Product + Price ---
 def load_barcodes():
-    # Returns {barcode: {"Product": name, "Price": price}}
     if os.path.exists(BARCODE_FILE):
         df = pd.read_csv(BARCODE_FILE)
         d = {}
@@ -78,9 +100,13 @@ if "stock" not in st.session_state:
 if "barcodes" not in st.session_state:
     st.session_state.barcodes = load_barcodes()
 
+# --- OWNER ONLY: Show Today's Total. Sales person does NOT see money total ---
 today_sales = [s for s in st.session_state.sales if str(s.get("Date")) == str(date.today())]
-today_total = sum(float(s.get("Total", 0)) for s in today_sales)
-st.markdown(f"### 💰 Today's Sales: K {today_total:.2f}  |  🧾 Items Sold: {len(today_sales)}")
+if st.session_state.role == "owner":
+    today_total = sum(float(s.get("Total", 0)) for s in today_sales)
+    st.markdown(f"### 💰 Today's Sales: K {today_total:.2f}  |  🧾 Items Sold: {len(today_sales)}")
+else:
+    st.markdown(f"### 🧾 Items Sold Today: {len(today_sales)}  |  Keep selling! 💪")
 
 def delete_sale(index_to_delete):
     sale = st.session_state.sales[index_to_delete]
@@ -92,13 +118,16 @@ def delete_sale(index_to_delete):
     save_sales(st.session_state.sales)
     st.session_state.msg = f"Deleted {prod} - Stock returned! {prod} now has {st.session_state.stock[prod]}"
 
-tab1, tab2, tab3 = st.tabs(["➕ Sell", "📦 Stock", "📊 Report"])
+# --- TABS BY ROLE ---
+if st.session_state.role == "owner":
+    tab1, tab2, tab3 = st.tabs(["➕ Sell", "📦 Stock", "📊 Report 👑 Owner Only"])
+else:
+    tab1, tab2 = st.tabs(["➕ Sell", "📦 Stock"])
+    tab3 = None
 
 with tab1:
     st.markdown("### ➕ Add New Sale")
     st.markdown("**📷 Have a scanner? Click the Barcode box and SCAN!**")
-
-    # --- BARCODE SCAN BOX ---
     def lookup_barcode():
         code = str(st.session_state.get("scan_code", "")).strip()
         if not code:
@@ -112,10 +141,8 @@ with tab1:
         else:
             st.session_state.msg = f"Barcode {code} not found! Add it in Stock tab first."
         st.session_state.scan_code = ""
-
     st.text_input("🔍 Scan Barcode Here (or type barcode)", key="scan_code", placeholder="Click here then scan...")
     st.button("🔍 Find Product", on_click=lookup_barcode)
-
     def add_sale():
         product = clean_name(st.session_state.get("prod_name", ""))
         qty = st.session_state.get("prod_qty", 1)
@@ -142,7 +169,6 @@ with tab1:
         st.session_state.prod_name = ""
         st.session_state.prod_qty = 1
         st.session_state.prod_price = 0.0
-
     product_raw = st.text_input("Product name", key="prod_name")
     product = clean_name(product_raw)
     if product and product in st.session_state.stock:
@@ -161,7 +187,6 @@ with tab1:
         else:
             st.error(st.session_state.msg)
         st.session_state.msg = ""
-
     st.markdown("---")
     st.markdown("### Today's Sales - Delete if wrong")
     if today_sales:
@@ -173,7 +198,11 @@ with tab1:
                 with c2:
                     st.write(f"x{s['Qty']}")
                 with c3:
-                    st.write(f"K {float(s['Total']):.2f}")
+                    # Sales person does NOT see money, Owner sees it
+                    if st.session_state.role == "owner":
+                        st.write(f"K {float(s['Total']):.2f}")
+                    else:
+                        st.write("---")
                 with c4:
                     if st.button("🗑️ Delete", key=f"del_today_{i}"):
                         delete_sale(i)
@@ -183,7 +212,6 @@ with tab1:
 
 with tab2:
     st.markdown("### 📦 Add Stock + Barcode")
-    st.write("When you get new stock, add Barcode + Price once. After that, scanning will work forever!")
     def add_stock():
         p = clean_name(st.session_state.get("stock_name", ""))
         q = st.session_state.get("stock_qty", 1)
@@ -197,7 +225,6 @@ with tab2:
             return
         st.session_state.stock[p] = st.session_state.stock.get(p, 0) + q
         save_stock(st.session_state.stock)
-        # Save barcode + price if given
         if code:
             st.session_state.barcodes[code] = {"Product": p, "Price": float(price)}
             save_barcodes(st.session_state.barcodes)
@@ -206,7 +233,6 @@ with tab2:
         st.session_state.stock_qty = 1
         st.session_state.stock_barcode = ""
         st.session_state.stock_price = 0.0
-
     st.text_input("Product name", key="stock_name")
     st.text_input("Barcode (click here and scan product)", key="stock_barcode", placeholder="e.g. 600123456789 or leave empty")
     st.number_input("Price per item (K) - for barcode auto-fill", min_value=0.0, step=1.0, key="stock_price")
@@ -215,45 +241,50 @@ with tab2:
     if "stock_msg" in st.session_state and st.session_state.stock_msg:
         st.success(st.session_state.stock_msg)
         st.session_state.stock_msg = ""
-
     st.markdown("---")
     st.markdown("### 📦 Current Stock")
     if st.session_state.stock:
         rows = []
         for k, v in st.session_state.stock.items():
-            # Find barcode for this product
             bcode = ""
             price_show = ""
             for code, info in st.session_state.barcodes.items():
                 if info["Product"] == k:
                     bcode = code
-                    price_show = f"K {info['Price']:.2f}"
+                    # Sales person should not see price in stock? We hide for safety
+                    if st.session_state.role == "owner":
+                        price_show = f"K {info['Price']:.2f}"
+                    else:
+                        price_show = "---"
                     break
             rows.append({"Product": k, "Qty Left": v, "Barcode": bcode, "Price": price_show, "Status": "⚠️ LOW" if v <= 5 else "✅ OK"})
         st.dataframe(pd.DataFrame(rows), use_container_width=True)
     else:
         st.write("No stock yet.")
 
-with tab3:
-    st.markdown("### 📊 All Sales Report - Delete if wrong")
-    if st.session_state.sales:
-        for i, s in enumerate(st.session_state.sales):
-            c1, c2, c3, c4, c5 = st.columns([2, 1, 1, 1, 1])
-            with c1:
-                st.write(f"{clean_name(s['Product'])} ({s['Date']})")
-            with c2:
-                st.write(f"x{s['Qty']}")
-            with c3:
-                st.write(f"K {float(s['Total']):.2f}")
-            with c4:
-                st.write(f"K {float(s['Price']):.2f} each")
-            with c5:
-                if st.button("🗑️", key=f"del_all_{i}"):
-                    delete_sale(i)
-                    st.rerun()
-        df = pd.DataFrame(st.session_state.sales)
-        st.markdown(f"**Total All Time: K {df['Total'].sum():.2f}**")
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("⬇️ Download Report (CSV)", csv, "sales_report.csv", "text/csv")
-    else:
-        st.write("No sales yet.")
+# --- OWNER ONLY TAB ---
+if st.session_state.role == "owner" and tab3 is not None:
+    with tab3:
+        st.markdown("### 📊 All Sales Report - Owner Only 👑")
+        st.write("Only you can see this! Your sales person cannot see this tab.")
+        if st.session_state.sales:
+            for i, s in enumerate(st.session_state.sales):
+                c1, c2, c3, c4, c5 = st.columns([2, 1, 1, 1, 1])
+                with c1:
+                    st.write(f"{clean_name(s['Product'])} ({s['Date']})")
+                with c2:
+                    st.write(f"x{s['Qty']}")
+                with c3:
+                    st.write(f"K {float(s['Total']):.2f}")
+                with c4:
+                    st.write(f"K {float(s['Price']):.2f} each")
+                with c5:
+                    if st.button("🗑️", key=f"del_all_{i}"):
+                        delete_sale(i)
+                        st.rerun()
+            df = pd.DataFrame(st.session_state.sales)
+            st.markdown(f"**Total All Time: K {df['Total'].sum():.2f}**")
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button("⬇️ Download Report (CSV)", csv, "sales_report.csv", "text/csv")
+        else:
+            st.write("No sales yet.")
