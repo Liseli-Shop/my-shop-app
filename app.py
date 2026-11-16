@@ -29,19 +29,33 @@ h1, h2, h3 { color: #1E7A34; }
 
 st.title("🛒 Liseli Shop - Sales & Stock")
 
+# --- HARMONIZE PRODUCT NAME ---
+def clean_name(name):
+    # "  SOAP  " -> "Soap", "washing powder" -> "Washing Powder"
+    return " ".join(word.capitalize() for word in str(name).strip().split())
+
 SALES_FILE = "sales.csv"
 STOCK_FILE = "stock.csv"
 
 def load_sales():
     if os.path.exists(SALES_FILE):
-        return pd.read_csv(SALES_FILE).to_dict("records")
+        df = pd.read_csv(SALES_FILE)
+        # Fix old sales too
+        if "Product" in df.columns:
+            df["Product"] = df["Product"].apply(clean_name)
+        return df.to_dict("records")
     return []
 def save_sales(data):
     pd.DataFrame(data).to_csv(SALES_FILE, index=False)
 def load_stock():
     if os.path.exists(STOCK_FILE):
         df = pd.read_csv(STOCK_FILE)
-        return dict(zip(df["Product"], df["Qty"]))
+        # Fix old stock too - combine Soap + soap into one
+        stock = {}
+        for _, row in df.iterrows():
+            name = clean_name(row["Product"])
+            stock[name] = stock.get(name, 0) + int(row["Qty"])
+        return stock
     return {}
 def save_stock(stock_dict):
     pd.DataFrame([{"Product": k, "Qty": v} for k, v in stock_dict.items()]).to_csv(STOCK_FILE, index=False)
@@ -55,15 +69,12 @@ today_sales = [s for s in st.session_state.sales if str(s.get("Date")) == str(da
 today_total = sum(float(s.get("Total", 0)) for s in today_sales)
 st.markdown(f"### 💰 Today's Sales: K {today_total:.2f}  |  🧾 Items Sold: {len(today_sales)}")
 
-# --- DELETE FUNCTION ---
 def delete_sale(index_to_delete):
     sale = st.session_state.sales[index_to_delete]
-    # Return stock back
-    prod = sale["Product"]
+    prod = clean_name(sale["Product"])
     qty_back = int(sale["Qty"])
     st.session_state.stock[prod] = st.session_state.stock.get(prod, 0) + qty_back
     save_stock(st.session_state.stock)
-    # Remove sale
     st.session_state.sales.pop(index_to_delete)
     save_sales(st.session_state.sales)
     st.session_state.msg = f"Deleted {prod} - Stock returned! {prod} now has {st.session_state.stock[prod]}"
@@ -73,7 +84,7 @@ tab1, tab2, tab3 = st.tabs(["➕ Sell", "📦 Stock", "📊 Report"])
 with tab1:
     st.markdown("### ➕ Add New Sale")
     def add_sale():
-        product = st.session_state.get("prod_name", "").strip()
+        product = clean_name(st.session_state.get("prod_name", ""))
         qty = st.session_state.get("prod_qty", 1)
         price = st.session_state.get("prod_price", 0.0)
         if not product:
@@ -99,10 +110,11 @@ with tab1:
         st.session_state.prod_qty = 1
         st.session_state.prod_price = 0.0
 
-    product = st.text_input("Product name", key="prod_name")
-    if product.strip() and product.strip() in st.session_state.stock:
-        st.info(f"📦 In Stock: {st.session_state.stock[product.strip()]}")
-    elif product.strip():
+    product_raw = st.text_input("Product name", key="prod_name")
+    product = clean_name(product_raw)
+    if product and product in st.session_state.stock:
+        st.info(f"📦 In Stock: {st.session_state.stock[product]}")
+    elif product:
         st.warning("⚠️ This product has 0 stock - Add stock first in Stock tab!")
     col_a, col_b = st.columns(2)
     with col_a:
@@ -124,7 +136,7 @@ with tab1:
             if str(s.get("Date")) == str(date.today()):
                 c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
                 with c1:
-                    st.write(f"{s['Product']}")
+                    st.write(f"{clean_name(s['Product'])}")
                 with c2:
                     st.write(f"x{s['Qty']}")
                 with c3:
@@ -139,7 +151,7 @@ with tab1:
 with tab2:
     st.markdown("### 📦 Add Stock")
     def add_stock():
-        p = st.session_state.get("stock_name", "").strip()
+        p = clean_name(st.session_state.get("stock_name", ""))
         q = st.session_state.get("stock_qty", 1)
         if not p:
             st.session_state.stock_msg = "Type product name!"
@@ -172,7 +184,7 @@ with tab3:
         for i, s in enumerate(st.session_state.sales):
             c1, c2, c3, c4, c5 = st.columns([2, 1, 1, 1, 1])
             with c1:
-                st.write(f"{s['Product']} ({s['Date']})")
+                st.write(f"{clean_name(s['Product'])} ({s['Date']})")
             with c2:
                 st.write(f"x{s['Qty']}")
             with c3:
