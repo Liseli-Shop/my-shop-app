@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime date import date
+from datetime import date
 import os
 
 st.set_page_config(page_title="Liseli Shop", page_icon="🛒")
