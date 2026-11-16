@@ -68,35 +68,52 @@ if "sales" not in st.session_state:
 # --- ADD SALE ---
 st.markdown("### ➕ Add New Sale")
 
-with st.form("sale_form", clear_on_submit=True):
-    product = st.text_input("Product name")
-    col_a, col_b = st.columns(2)
-    with col_a:
-        qty = st.number_input("How many sold", min_value=0, step=1, value=1)
-    with col_b:
-        price = st.number_input("Price per item (K)", min_value=0.0, step=1.0)
-    
-    submitted = st.form_submit_button("➕ Add Sale", type="primary")
-    
-    if submitted:
-        if not product.strip():
-            st.error("Please type a product name!")
-        elif qty <= 0:
-            st.error("Quantity must be more than 0!")
-        elif price <= 0:
-            st.error("Price must be more than 0!")
-        else:
-            total = qty * price
-            st.session_state.sales.append({
-                "Product": product.strip(),
-                "Price": price,
-                "Qty": qty,
-                "Total": total,
-                "Date": str(date.today())
-            })
-            save_sales(st.session_state.sales)
-            st.success(f"Saved! {product} = K {total:.2f}")
-            st.rerun()
+def add_sale():
+    product = st.session_state.get("prod_name", "").strip()
+    qty = st.session_state.get("prod_qty", 1)
+    price = st.session_state.get("prod_price", 0.0)
+
+    if not product:
+        st.session_state.msg = "Please type a product name!"
+        return
+    if qty <= 0:
+        st.session_state.msg = "Quantity must be more than 0!"
+        return
+    if price <= 0:
+        st.session_state.msg = "Price must be more than 0!"
+        return
+
+    total = qty * price
+    st.session_state.sales.append({
+        "Product": product,
+        "Price": price,
+        "Qty": qty,
+        "Total": total,
+        "Date": str(date.today())
+    })
+    save_sales(st.session_state.sales)
+    st.session_state.msg = f"Saved! {product} = K {total:.2f}"
+
+    # Clear boxes
+    st.session_state.prod_name = ""
+    st.session_state.prod_qty = 1
+    st.session_state.prod_price = 0.0
+
+product = st.text_input("Product name", key="prod_name")
+col_a, col_b = st.columns(2)
+with col_a:
+    qty = st.number_input("How many sold", min_value=0, step=1, value=1, key="prod_qty")
+with col_b:
+    price = st.number_input("Price per item (K)", min_value=0.0, step=1.0, key="prod_price")
+
+st.button("➕ Add Sale", type="primary", on_click=add_sale)
+
+if "msg" in st.session_state and st.session_state.msg:
+    if "Saved!" in st.session_state.msg:
+        st.success(st.session_state.msg)
+    else:
+        st.error(st.session_state.msg)
+    st.session_state.msg = ""
 
 # --- TOTALS ---
 today_str = str(date.today())
