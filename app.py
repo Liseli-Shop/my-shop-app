@@ -67,32 +67,36 @@ if "sales" not in st.session_state:
 
 # --- ADD SALE ---
 st.markdown("### ➕ Add New Sale")
-product = st.text_input("Product name")
-col_a, col_b = st.columns(2)
-with col_a:
-    qty = st.number_input("How many sold", min_value=0, step=1, value=1)
-with col_b:
-    price = st.number_input("Price per item (K)", min_value=0.0, step=1.0)
 
-if st.button("➕ Add Sale", type="primary"):
-    if not product.strip():
-        st.error("Please type a product name!")
-    elif qty <= 0:
-        st.error("Quantity must be more than 0!")
-    elif price <= 0:
-        st.error("Price must be more than 0!")
-    else:
-        total = qty * price
-        st.session_state.sales.append({
-            "Product": product.strip(),
-            "Price": price,
-            "Qty": qty,
-            "Total": total,
-            "Date": str(date.today())
-        })
-        save_sales(st.session_state.sales)
-        st.success(f"Saved! {product} = K {total:.2f}")
-        st.rerun()
+with st.form("sale_form", clear_on_submit=True):
+    product = st.text_input("Product name")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        qty = st.number_input("How many sold", min_value=0, step=1, value=1)
+    with col_b:
+        price = st.number_input("Price per item (K)", min_value=0.0, step=1.0)
+    
+    submitted = st.form_submit_button("➕ Add Sale", type="primary")
+    
+    if submitted:
+        if not product.strip():
+            st.error("Please type a product name!")
+        elif qty <= 0:
+            st.error("Quantity must be more than 0!")
+        elif price <= 0:
+            st.error("Price must be more than 0!")
+        else:
+            total = qty * price
+            st.session_state.sales.append({
+                "Product": product.strip(),
+                "Price": price,
+                "Qty": qty,
+                "Total": total,
+                "Date": str(date.today())
+            })
+            save_sales(st.session_state.sales)
+            st.success(f"Saved! {product} = K {total:.2f}")
+            st.rerun()
 
 # --- TOTALS ---
 today_str = str(date.today())
